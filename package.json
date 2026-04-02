@@ -1,0 +1,55 @@
+{
+  "name": "create-carch",
+  "version": "1.0.0",
+  "description": "Clean & Modular Clean Architecture scaffold for Next.js — generate full project structure, modules, CRUD, and i18n from the CLI",
+  "type": "module",
+  "bin": {
+    "carch": "./src/cli.js",
+    "create-carch": "./src/commands/create.js"
+  },
+  "scripts": {
+    "dev": "node src/cli.js"
+  },
+  "files": [
+    "src/",
+    "README.md"
+  ],
+  "dependencies": {
+    "@clack/prompts": "latest",
+    "picocolors": "latest",
+    "fs-extra": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "@types/node": "latest",
+    "@types/fs-extra": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "clean-architecture",
+    "modular",
+    "nextjs",
+    "scaffold",
+    "cli",
+    "boilerplate",
+    "typescript",
+    "next-intl",
+    "i18n"
+  ],
+  "author": {
+    "name": "Mohamed Adel Eid",
+    "email": "dev.mohamedadell@gmail.com",
+    "url": "https://github.com/MohamedAdelEid"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MohamedAdelEid/carch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MohamedAdelEid/carch/issues"
+  },
+  "homepage": "https://github.com/MohamedAdelEid/carch#readme"
+}
