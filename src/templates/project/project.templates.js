@@ -1,8 +1,3 @@
-/**
- * Project-level file templates
- * Used during initial project creation (create command)
- */
-
 export function tsconfigTemplate() {
   return JSON.stringify(
     {
@@ -24,7 +19,40 @@ export function tsconfigTemplate() {
       exclude: ["node_modules"],
     },
     null,
-    2
+    2,
+  );
+}
+
+export function componentsJsonTemplate(isModular) {
+  const uiPath = isModular
+    ? "src/shared/presentation/components/ui"
+    : "src/presentation/components/ui";
+  const cssPath = isModular
+    ? "src/shared/presentation/styles/globals.css"
+    : "src/presentation/styles/globals.css";
+
+  return JSON.stringify(
+    {
+      $schema: "https://ui.shadcn.com/schema.json",
+      style: "default",
+      rsc: true,
+      tsx: true,
+      tailwind: {
+        config: "",
+        css: cssPath,
+        baseColor: "neutral",
+        cssVariables: true,
+      },
+      aliases: {
+        components: "@/shared/presentation/components",
+        utils: "@/shared/application/lib/cn",
+        ui: uiPath,
+        lib: "@/shared/application/lib",
+        hooks: "@/shared/application/hooks",
+      },
+    },
+    null,
+    2,
   );
 }
 
@@ -44,25 +72,21 @@ export default withNextIntl(nextConfig);
 
 export function envLocalTemplate() {
   return `NEXT_PUBLIC_API_URL=http://localhost:8000/api
+NEXT_PUBLIC_API_TIMEOUT=15000
 NEXTAUTH_SECRET=your-secret-here
 NEXTAUTH_URL=http://localhost:3000
 `;
 }
 
 export function gitignoreTemplate() {
-  return `.next
-node_modules
-.env.local
-.env
-*.tsbuildinfo
-`;
+  return `.next\nnode_modules\n.env.local\n.env\n*.tsbuildinfo\n`;
 }
 
 export function rootLayoutTemplate(defaultLocale) {
   return `import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
-import { AppProviders } from "@/providers";
-import "@/styles/globals.css";
+import { AppProviders } from "@/shared/presentation/providers";
+import "@/shared/presentation/styles/globals.css";
 
 export default async function RootLayout({
   children,
@@ -88,18 +112,14 @@ export default async function RootLayout({
 export function middlewareTemplate(withAuth) {
   return `import createMiddleware from "next-intl/middleware";
 import { defaultLocale } from "./config/i18n";
-${withAuth ? `import { auth } from "./shared/infrastructure/auth/auth";` : ""}
+${withAuth ? `import { auth } from "./shared/infrastructure/auth/nextAuth";` : ""}
 
 const intlMiddleware = createMiddleware({
   locales: ["ar", "en"],
   defaultLocale,
 });
 
-${
-  withAuth
-    ? `export default auth((req) => intlMiddleware(req));`
-    : `export default intlMiddleware;`
-}
+${withAuth ? `export default auth((req) => intlMiddleware(req));` : `export default intlMiddleware;`}
 
 export const config = {
   matcher: ["/((?!api|_next|_vercel|.*\\\\..*).*)"],
@@ -117,10 +137,7 @@ export function moduleTypesTemplate() {
 
 export function modulesConfigTemplate(modulesList) {
   const imports = modulesList
-    .map(
-      (m) =>
-        `import { ${m}Module } from "@/modules/${m}/module.config";`
-    )
+    .map((m) => `import { ${m}Module } from "@/modules/${m}/module.config";`)
     .join("\n");
   const array = modulesList.map((m) => `  ${m}Module`).join(",\n");
   return `${imports}
@@ -147,9 +164,10 @@ export default getRequestConfig(async ({ requestLocale }) => {
   const sharedNs = ["common", "table", "pagination"];
   const sharedMessages: Record<string, unknown> = {};
   for (const ns of sharedNs) {
-    const mod = await import(\`../shared/i18n/\${locale}/\${ns}/index.json\`, {
-      assert: { type: "json" },
-    });
+    const mod = await import(
+      \`../shared/presentation/i18n/\${locale}/\${ns}/index.json\`,
+      { assert: { type: "json" } }
+    );
     Object.assign(sharedMessages, mod.default);
   }
 
@@ -158,20 +176,16 @@ export default getRequestConfig(async ({ requestLocale }) => {
     for (const ns of module.i18nNamespaces) {
       try {
         const mod = await import(
-          \`../modules/\${module.name}/i18n/\${locale}/\${ns}/index.json\`,
+          \`../modules/\${module.name}/presentation/i18n/\${locale}/\${ns}/index.json\`,
           { assert: { type: "json" } }
         );
         moduleMessages[\`\${module.name}.\${ns}\`] = mod.default[ns];
       } catch {
-        // namespace file not found — skip
       }
     }
   }
 
-  return {
-    locale,
-    messages: { ...sharedMessages, ...moduleMessages },
-  };
+  return { locale, messages: { ...sharedMessages, ...moduleMessages } };
 });
 `;
 }
@@ -179,13 +193,30 @@ export default getRequestConfig(async ({ requestLocale }) => {
 export function envTemplate() {
   return `import { z } from "zod";
 
-const envSchema = z.object({
-  NEXT_PUBLIC_API_URL: z.string().url(),
-  NEXTAUTH_SECRET: z.string().min(1),
-  NEXTAUTH_URL: z.string().url(),
+const schema = z.object({
+  NEXT_PUBLIC_API_URL:     z.string().url(),
+  NEXT_PUBLIC_API_TIMEOUT: z.string().optional(),
+  NEXTAUTH_SECRET:         z.string().min(1),
+  NEXTAUTH_URL:            z.string().url(),
 });
 
-export const env = envSchema.parse(process.env);
+export const env = schema.parse(process.env);
+`;
+}
+
+export function featureFlagsTemplate(modules) {
+  const flags = modules.length
+    ? modules.map((m) => `  ${m}: true,`).join("\n")
+    : "  // featureName: true,";
+  return `export const featureFlags = {
+${flags}
+} as const;
+
+export type FeatureFlag = keyof typeof featureFlags;
+
+export function isEnabled(flag: FeatureFlag): boolean {
+  return featureFlags[flag];
+}
 `;
 }
 
@@ -209,7 +240,7 @@ export const notify = {
   dismiss: (id?: string | number) => toast.dismiss(id),
   promise: <T>(
     promise: Promise<T>,
-    messages: { loading: string; success: string; error: string }
+    messages: { loading: string; success: string; error: string },
   ) => toast.promise(promise, messages),
 };
 `;
@@ -232,34 +263,6 @@ export function formatCurrency(amount: number, currency = "EGP", locale = "ar-EG
 `;
 }
 
-export function httpClientTemplate() {
-  return `import axios from "axios";
-import { env } from "@/config/env";
-
-export const apiClient = axios.create({
-  baseURL: env.NEXT_PUBLIC_API_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-apiClient.interceptors.request.use((config) => {
-  const token =
-    typeof window !== "undefined" ? sessionStorage.getItem("token") : null;
-  if (token) config.headers.Authorization = \`Bearer \${token}\`;
-  return config;
-});
-
-apiClient.interceptors.response.use(
-  (res) => res,
-  (error) => {
-    if (error.response?.status === 401) {
-      // redirect or refresh token
-    }
-    return Promise.reject(error);
-  }
-);
-`;
-}
-
 export function queryProviderTemplate() {
   return `"use client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -267,9 +270,10 @@ import { useState } from "react";
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [client] = useState(
-    () => new QueryClient({
-      defaultOptions: { queries: { staleTime: 60_000, retry: 1 } },
-    })
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { staleTime: 60_000, retry: 1 } },
+      }),
   );
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
@@ -292,42 +296,57 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 `;
 }
 
-export function dashboardLayoutTemplate() {
-  return `"use client";
-
-export function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-screen">
-      <aside className="w-64 border-e bg-background">
-        {/* sidebar */}
-      </aside>
-      <main className="flex-1 p-6">{children}</main>
-    </div>
-  );
-}
-`;
-}
-
 export function globalsCssTemplate() {
   return `@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
 }
 
 * { box-sizing: border-box; }
-
 body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: var(--background);
+  color: var(--foreground);
 }
 `;
+}
+
+export function fontsCssTemplate() {
+  return `/* custom font-face declarations */\n`;
 }
 
 export function sharedApiTypesTemplate() {
@@ -372,12 +391,15 @@ export function useDebounce<T>(value: T, delay = 400): T {
 `;
 }
 
-export function packageJsonTemplate(projectName, config) {
+export function packageJsonTemplate(projectName, cfg) {
   const deps = {
     next: "latest",
     react: "latest",
     "react-dom": "latest",
     "next-intl": "latest",
+    axios: "latest",
+    "next-auth": "latest",
+    "@tanstack/react-query": "latest",
   };
   const devDeps = {
     typescript: "latest",
@@ -385,34 +407,19 @@ export function packageJsonTemplate(projectName, config) {
     "@types/react": "latest",
     "@types/react-dom": "latest",
     tailwindcss: "latest",
+    "tw-animate-css": "latest",
   };
-  if (config.auth) deps["next-auth"] = "latest";
-  if (config.dataFetching === "tanstack-query") {
-    deps["@tanstack/react-query"] = "latest";
-    deps["axios"] = "latest";
-  } else if (config.dataFetching === "swr") {
-    deps["swr"] = "latest";
-    deps["axios"] = "latest";
-  } else {
-    deps["axios"] = "latest";
-  }
-  if (config.uiLib === "shadcn") {
-    deps["clsx"] = "latest";
-    deps["tailwind-merge"] = "latest";
-    deps["class-variance-authority"] = "latest";
-    deps["@radix-ui/react-dialog"] = "latest";
-    deps["lucide-react"] = "latest";
-  }
-  if (config.extras.includes("rhf-zod")) {
+  if (cfg.extras?.includes("rhf-zod")) {
     deps["react-hook-form"] = "latest";
     deps["zod"] = "latest";
     deps["@hookform/resolvers"] = "latest";
   }
-  if (config.extras.includes("tanstack-table"))
-    deps["@tanstack/react-table"] = "latest";
-  if (config.extras.includes("framer-motion"))
-    deps["framer-motion"] = "latest";
-  if (config.extras.includes("sonner")) deps["sonner"] = "latest";
+  if (cfg.extras?.includes("tanstack-table")) deps["@tanstack/react-table"] = "latest";
+  if (cfg.extras?.includes("framer-motion"))  deps["framer-motion"] = "latest";
+  if (cfg.extras?.includes("sonner"))         deps["sonner"] = "latest";
+  deps["clsx"] = "latest";
+  deps["tailwind-merge"] = "latest";
+  deps["lucide-react"] = "latest";
 
   return JSON.stringify(
     {
@@ -429,6 +436,6 @@ export function packageJsonTemplate(projectName, config) {
       devDependencies: devDeps,
     },
     null,
-    2
+    2,
   );
 }

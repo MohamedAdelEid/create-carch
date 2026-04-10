@@ -1,8 +1,3 @@
-/**
- * Naming utilities
- * All string transformation helpers used across generators
- */
-
 export const toPascal = (s) =>
   s.replace(/(^\w|-\w)/g, (m) => m.replace("-", "").toUpperCase());
 
@@ -18,21 +13,12 @@ export const toPlural = (s) => {
   return s + "s";
 };
 
-/**
- * Returns all naming variants for a given raw string
- * e.g. "live-session" →
- *   pascal: "LiveSession"
- *   camel:  "liveSession"
- *   kebab:  "live-session"
- *   plural: "live-sessions"
- *   pluralPascal: "LiveSessions"
- */
 export const nameVariants = (raw) => {
-  const kebab = toKebab(raw);
-  const pascal = toPascal(raw);
-  const camel = toCamel(raw);
-  const plural = toPlural(kebab);
+  const kebab       = toKebab(raw);
+  const pascal      = toPascal(raw);
+  const camel       = toCamel(raw);
+  const plural      = toPlural(kebab);
   const pluralPascal = toPascal(plural);
-  const pluralCamel = toCamel(plural);
+  const pluralCamel  = toCamel(plural);
   return { kebab, pascal, camel, plural, pluralPascal, pluralCamel };
 };

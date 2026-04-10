@@ -1,9 +1,3 @@
-/**
- * CRUD Templates
- * Each function returns the file content string for one generated file.
- * n = nameVariants(entityName), moduleName = raw module name
- */
-
 export function entityTemplate(n) {
   return `import { z } from "zod";
 
@@ -45,7 +39,7 @@ export type Delete${n.pascal}Response    = { success: boolean };
 }
 
 export function apiTemplate(n, moduleName) {
-  return `import { apiClient } from "@/shared/infrastructure/http/client";
+  return `import { httpClient } from "@/shared/infrastructure/http/httpClient";
 import type { Create${n.pascal}Dto, Update${n.pascal}Dto, ${n.pascal}Filters } from "../../domain/types/${n.camel}.types";
 import type {
   Get${n.pluralPascal}Response,
@@ -58,20 +52,20 @@ import type {
 const BASE = "/${moduleName}/${n.plural}";
 
 export const ${n.pluralCamel}Api = {
-  getAll: (filters: ${n.pascal}Filters) =>
-    apiClient.get<Get${n.pluralPascal}Response>(BASE, { params: filters }).then((r) => r.data),
+  getAll:   (filters: ${n.pascal}Filters) =>
+    httpClient.get<Get${n.pluralPascal}Response>({ url: BASE, params: filters }),
 
-  getById: (id: string) =>
-    apiClient.get<Get${n.pascal}Response>(\`\${BASE}/\${id}\`).then((r) => r.data),
+  getById:  (id: string) =>
+    httpClient.get<Get${n.pascal}Response>({ url: \`\${BASE}/\${id}\` }),
 
-  create: (dto: Create${n.pascal}Dto) =>
-    apiClient.post<Create${n.pascal}Response>(BASE, dto).then((r) => r.data),
+  create:   (dto: Create${n.pascal}Dto) =>
+    httpClient.post<Create${n.pascal}Response>({ url: BASE, data: dto }),
 
-  update: (id: string, dto: Update${n.pascal}Dto) =>
-    apiClient.put<Update${n.pascal}Response>(\`\${BASE}/\${id}\`, dto).then((r) => r.data),
+  update:   (id: string, dto: Update${n.pascal}Dto) =>
+    httpClient.put<Update${n.pascal}Response>({ url: \`\${BASE}/\${id}\`, data: dto }),
 
-  delete: (id: string) =>
-    apiClient.delete<Delete${n.pascal}Response>(\`\${BASE}/\${id}\`).then((r) => r.data),
+  delete:   (id: string) =>
+    httpClient.delete<Delete${n.pascal}Response>({ url: \`\${BASE}/\${id}\` }),
 };
 `;
 }
@@ -93,7 +87,11 @@ export function use${n.pluralPascal}() {
 
   const query = useQuery({
     queryKey: ${n.camel}Keys.list(filters),
-    queryFn:  () => ${n.pluralCamel}Api.getAll(filters),
+    queryFn:  async () => {
+      const result = await ${n.pluralCamel}Api.getAll(filters);
+      if (!result.data) throw new Error(result.message);
+      return result.data;
+    },
   });
 
   return { ...query, filters, setFilters };
@@ -105,30 +103,30 @@ export function useMutationsHookTemplate(n) {
   return `import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ${n.pluralCamel}Api } from "../../infrastructure/api/${n.plural}.api";
 import { ${n.camel}Keys } from "./use${n.pluralPascal}";
-import { notify } from "@/lib/toast";
+import { notify } from "@/shared/application/lib/toast";
 import type { Update${n.pascal}Dto } from "../../domain/types/${n.camel}.types";
 
 export function use${n.pascal}Mutations() {
-  const qc = useQueryClient();
+  const qc         = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ${n.camel}Keys.all });
 
   const create = useMutation({
     mutationFn: ${n.pluralCamel}Api.create,
-    onSuccess: () => { invalidate(); notify.success("${n.pascal} created"); },
-    onError:   () => notify.error("Failed to create ${n.pascal}"),
+    onSuccess:  () => { invalidate(); notify.success("${n.pascal} created"); },
+    onError:    (e: Error) => notify.error(e.message),
   });
 
   const update = useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: Update${n.pascal}Dto }) =>
       ${n.pluralCamel}Api.update(id, dto),
-    onSuccess: () => { invalidate(); notify.success("${n.pascal} updated"); },
-    onError:   () => notify.error("Failed to update ${n.pascal}"),
+    onSuccess:  () => { invalidate(); notify.success("${n.pascal} updated"); },
+    onError:    (e: Error) => notify.error(e.message),
   });
 
   const remove = useMutation({
     mutationFn: ${n.pluralCamel}Api.delete,
-    onSuccess: () => { invalidate(); notify.success("${n.pascal} deleted"); },
-    onError:   () => notify.error("Failed to delete ${n.pascal}"),
+    onSuccess:  () => { invalidate(); notify.success("${n.pascal} deleted"); },
+    onError:    (e: Error) => notify.error(e.message),
   });
 
   return { create, update, remove };
@@ -139,6 +137,7 @@ export function use${n.pascal}Mutations() {
 export function columnsTemplate(n) {
   return `"use client";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Button } from "@/components/ui/button";
 import type { ${n.pascal} } from "../../../domain/entities/${n.camel}.entity";
 
 type Props = {
@@ -162,8 +161,8 @@ export function use${n.pascal}Columns({ onEdit, onDelete }: Props): ColumnDef<${
       header: "",
       cell:   ({ row }) => (
         <div className="flex gap-2">
-          <button onClick={() => onEdit(row.original)}>Edit</button>
-          <button onClick={() => onDelete(row.original)}>Delete</button>
+          <Button variant="outline"     size="sm" onClick={() => onEdit(row.original)}>Edit</Button>
+          <Button variant="destructive" size="sm" onClick={() => onDelete(row.original)}>Delete</Button>
         </div>
       ),
     },
@@ -177,16 +176,25 @@ export function formTemplate(n) {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { ${n.pascal}Schema } from "../../../domain/entities/${n.camel}.entity";
 import type { ${n.pascal} } from "../../../domain/entities/${n.camel}.entity";
-import type { Create${n.pascal}Dto } from "../../../domain/types/${n.camel}.types";
 
 const FormSchema = ${n.pascal}Schema.pick({ name: true });
-type FormValues = z.infer<typeof FormSchema>;
+type FormValues  = z.infer<typeof FormSchema>;
 
 type Props = {
   defaultValues?: Partial<${n.pascal}>;
-  onSubmit:       (dto: Create${n.pascal}Dto) => void;
+  onSubmit:       (values: FormValues) => void;
   isLoading?:     boolean;
 };
 
@@ -197,18 +205,24 @@ export function ${n.pascal}Form({ defaultValues, onSubmit, isLoading }: Props) {
   });
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)}>
-      <div>
-        <label>Name</label>
-        <input {...form.register("name")} />
-        {form.formState.errors.name && (
-          <p>{form.formState.errors.name.message}</p>
-        )}
-      </div>
-      <button type="submit" disabled={isLoading}>
-        {isLoading ? "Saving..." : "Save"}
-      </button>
-    </form>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Name</FormLabel>
+              <FormControl><Input {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit" disabled={isLoading} className="w-full">
+          {isLoading ? "Saving..." : "Save"}
+        </Button>
+      </form>
+    </Form>
   );
 }
 `;
@@ -216,6 +230,12 @@ export function ${n.pascal}Form({ defaultValues, onSubmit, isLoading }: Props) {
 
 export function createDialogTemplate(n) {
   return `"use client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ${n.pascal}Form } from "./${n.pascal}Form";
 import type { Create${n.pascal}Dto } from "../../../domain/types/${n.camel}.types";
 
@@ -227,16 +247,15 @@ type Props = {
 };
 
 export function Create${n.pascal}Dialog({ open, onOpenChange, onSubmit, isLoading }: Props) {
-  if (!open) return null;
   return (
-    <div role="dialog">
-      <h2>Create ${n.pascal}</h2>
-      <${n.pascal}Form
-        onSubmit={(dto) => { onSubmit(dto); onOpenChange(false); }}
-        isLoading={isLoading}
-      />
-      <button onClick={() => onOpenChange(false)}>Cancel</button>
-    </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create ${n.pascal}</DialogTitle>
+        </DialogHeader>
+        <${n.pascal}Form onSubmit={onSubmit} isLoading={isLoading} />
+      </DialogContent>
+    </Dialog>
   );
 }
 `;
@@ -244,6 +263,12 @@ export function Create${n.pascal}Dialog({ open, onOpenChange, onSubmit, isLoadin
 
 export function editDialogTemplate(n) {
   return `"use client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ${n.pascal}Form } from "./${n.pascal}Form";
 import type { ${n.pascal} } from "../../../domain/entities/${n.camel}.entity";
 import type { Update${n.pascal}Dto } from "../../../domain/types/${n.camel}.types";
@@ -257,15 +282,18 @@ type Props = {
 
 export function Edit${n.pascal}Dialog({ ${n.camel}, onOpenChange, onSubmit, isLoading }: Props) {
   return (
-    <div role="dialog">
-      <h2>Edit ${n.pascal}</h2>
-      <${n.pascal}Form
-        defaultValues={${n.camel}}
-        onSubmit={(dto) => { onSubmit(dto); onOpenChange(false); }}
-        isLoading={isLoading}
-      />
-      <button onClick={() => onOpenChange(false)}>Cancel</button>
-    </div>
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit ${n.pascal}</DialogTitle>
+        </DialogHeader>
+        <${n.pascal}Form
+          defaultValues={${n.camel}}
+          onSubmit={onSubmit}
+          isLoading={isLoading}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 `;
@@ -273,6 +301,16 @@ export function Edit${n.pascal}Dialog({ ${n.camel}, onOpenChange, onSubmit, isLo
 
 export function deleteDialogTemplate(n) {
   return `"use client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Props = {
   open:         boolean;
@@ -282,15 +320,23 @@ type Props = {
 };
 
 export function Delete${n.pascal}Dialog({ open, onConfirm, onOpenChange, isLoading }: Props) {
-  if (!open) return null;
   return (
-    <div role="dialog">
-      <p>Are you sure you want to delete this ${n.pascal}?</p>
-      <button onClick={onConfirm} disabled={isLoading}>
-        {isLoading ? "Deleting..." : "Delete"}
-      </button>
-      <button onClick={() => onOpenChange(false)}>Cancel</button>
-    </div>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete ${n.pascal}</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} disabled={isLoading}>
+            {isLoading ? "Deleting..." : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 `;
@@ -299,6 +345,7 @@ export function Delete${n.pascal}Dialog({ open, onConfirm, onOpenChange, isLoadi
 export function pageTemplate(n, moduleName) {
   return `"use client";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { use${n.pluralPascal} } from "../../application/hooks/use${n.pluralPascal}";
 import { use${n.pascal}Mutations } from "../../application/hooks/use${n.pascal}Mutations";
 import { use${n.pascal}Columns } from "../components/${n.plural}/${n.pascal}Columns";
@@ -310,8 +357,8 @@ import { Pagination } from "@/shared/presentation/components/Pagination";
 import type { ${n.pascal} } from "../../domain/entities/${n.camel}.entity";
 
 export function ${n.pluralPascal}Page() {
-  const [createOpen, setCreateOpen]   = useState(false);
-  const [editTarget, setEditTarget]   = useState<${n.pascal} | null>(null);
+  const [createOpen, setCreateOpen]     = useState(false);
+  const [editTarget, setEditTarget]     = useState<${n.pascal} | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<${n.pascal} | null>(null);
 
   const { data, isLoading, filters, setFilters } = use${n.pluralPascal}();
@@ -323,10 +370,10 @@ export function ${n.pluralPascal}Page() {
   });
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <h1>${n.pluralPascal}</h1>
-        <button onClick={() => setCreateOpen(true)}>+ Create</button>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">${n.pluralPascal}</h1>
+        <Button onClick={() => setCreateOpen(true)}>Create</Button>
       </div>
 
       <DataTable columns={columns} data={data?.data ?? []} isLoading={isLoading} />

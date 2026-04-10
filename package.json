@@ -1,6 +1,6 @@
 {
   "name": "create-carch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Clean & Modular Clean Architecture scaffold for Next.js — generate full project structure, modules, CRUD, and i18n from the CLI",
   "type": "module",
   "bin": {
@@ -46,10 +46,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MohamedAdelEid/carch.git"
+    "url": "https://github.com/MohamedAdelEid/create-carch.git"
   },
   "bugs": {
-    "url": "https://github.com/MohamedAdelEid/carch/issues"
+    "url": "https://github.com/MohamedAdelEid/create-carch/issues"
   },
-  "homepage": "https://github.com/MohamedAdelEid/carch#readme"
+  "homepage": "https://github.com/MohamedAdelEid/create-carch#readme"
 }
